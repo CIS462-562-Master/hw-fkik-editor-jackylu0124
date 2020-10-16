@@ -122,6 +122,7 @@ void ASplineQuat::computeControlPoints(quat& startQuat, quat& endQuat)
 
 	quat b0, b1, b2, b3;
 	quat q_1, q0, q1, q2;
+	// Jacky's Note: q_1 corresponds to q_{i-1}, q0 corresponds to q_{i}, q1 corresponds to q_{i+1}, q2 corresponds to q_{i+2}
 
 	for (int segment = 0; segment < numKeys - 1; segment++)
 	{
@@ -130,7 +131,20 @@ void ASplineQuat::computeControlPoints(quat& startQuat, quat& endQuat)
 		//  for each cubic quaternion curve, then store the results in mCntrlPoints in same the same way 
 		//  as was used with the SplineVec implementation
 		//  Hint: use the SDouble, SBisect and Slerp to compute b1 and b2
+		q_1 = segment - 1 == -1 ? startQuat : mKeys[segment - 1].second;
+		q0 = mKeys[segment].second;
+		q1 = mKeys[segment + 1].second;
+		q2 = segment + 2 == numKeys ? endQuat : mKeys[segment + 2].second;
 
+		quat q1_prime = quat::SDouble(q_1, q0);
+		quat q1_star = quat::SBisect(q1_prime, q1);
+		quat q0_prime = quat::SDouble(q2, q1);
+		quat q0_star = quat::SBisect(q0, q0_prime);
+
+		b0 = q0;
+		b1 = quat::Slerp(q0, q1_star, 1.0 / 3.0);
+		b2 = quat::Slerp(q1, q0_star, 1.0 / 3.0);
+		b3 = q1;
 
 		mCtrlPoints.push_back(b0);
 		mCtrlPoints.push_back(b1);
@@ -147,7 +161,14 @@ quat ASplineQuat::getLinearValue(double t)
 
 	// TODO: student implementation goes here
 	// compute the value of a linear quaternion spline at the value of t using slerp
+	quat key0 = mKeys[segment].second;
+	quat key1 = mKeys[segment + 1].second;
 
+	double t0 = mKeys[segment].first;
+	double t1 = mKeys[segment + 1].first;
+	double u = (t - t0) / (t1 - t0);
+
+	q = quat::Slerp(key0, key1, u);
 	return q;	
 }
 
@@ -175,6 +196,24 @@ quat ASplineQuat::getCubicValue(double t)
 
 	// TODO: student implementation goes here
 	// compute the value of a cubic quaternion spline at the value of t using Scubic
+	double t0 = mKeys[segment].first;
+	double t1 = mKeys[segment + 1].first;
+	double u = (t - t0) / (t1 - t0);
+
+	b0 = mCtrlPoints[4 * segment];
+	b1 = mCtrlPoints[4 * segment + 1];
+	b2 = mCtrlPoints[4 * segment + 2];
+	b3 = mCtrlPoints[4 * segment + 3];
+
+	// Notation: b_ij means b with subscript i and superscript j
+	quat b_01 = quat::Slerp(b0, b1, u);
+	quat b_11 = quat::Slerp(b1, b2, u);
+	quat b_21 = quat::Slerp(b2, b3, u);
+
+	quat b_02 = quat::Slerp(b_01, b_11, u);
+	quat b_12 = quat::Slerp(b_11, b_21, u);
+
+	q = quat::Slerp(b_02, b_12, u);
 
 	return q;
 }

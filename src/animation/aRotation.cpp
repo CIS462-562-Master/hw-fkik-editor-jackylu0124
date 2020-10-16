@@ -219,9 +219,26 @@ bool mat3::ToEulerAngles(RotOrder order, vec3& angleRad) const
 
 	case YXZ:
 		//TODO: student implementation for computing Euler angles from a rotation matrix with an YXZ order of rotation goes here
-		angleRad = vec3(0.0, 0.0, 0.0);
-		result = false;
-
+		angleRad[VX] = -asin(mM[1][2]);
+        if (angleRad[VY] > -M_PI_2 + EPSILON)
+        {
+            if (angleRad[VY] < M_PI_2 - EPSILON)
+            {
+                angleRad[VZ] = atan2(mM[1][0], mM[1][1]);
+                angleRad[VY] = atan2(mM[0][2], mM[2][2]);
+                result = true;
+            }
+            else {
+                angleRad[VZ] = 0.0f;
+                angleRad[VY] = atan2(mM[0][1], mM[0][0]);
+                result = false;
+            }
+        }
+        else {
+            angleRad[VZ] = 0.0f;
+            angleRad[VY] = -atan2(mM[0][1], mM[0][0]);
+            result = false;
+        }
 		break;
 	}
 	return result;
@@ -264,8 +281,10 @@ mat3 mat3::FromEulerAngles(RotOrder order, const vec3& anglesRad)
 
 	case YXZ:
 		//TODO: student implementation for computing rotation matrix for YXZ order of rotation goes here
-		m.Identity();
-
+		// m.Identity();
+        m = mat3::Rotation3D(axisY, anglesRad[VY])
+            * mat3::Rotation3D(axisX, anglesRad[VX])
+            * mat3::Rotation3D(axisZ, anglesRad[VZ]);
 		break;
 	}
 	*this = m;
@@ -1049,30 +1068,37 @@ void quat::FromRotation(const mat3& rot)
 {
 	mQ[VW] = 0.0; mQ[VX] = 1.0; mQ[VY] = 0.0;  mQ[VZ] = 0.0;
 	//TODO: student implementation for converting from rotation matrix to quat goes here
-	
+    double s = sqrt(rot[0][0] + rot[1][1] + rot[2][2] + 1.0) / 2.0;
+    if (s != 0.0) {
+        mQ[VW] = s;
+        mQ[VX] = (rot[2][1] - rot[1][2]) / (4.0 * s);
+        mQ[VY] = (rot[0][2] - rot[2][0]) / (4.0 * s);
+        mQ[VZ] = (rot[1][0] - rot[0][1]) / (4.0 * s);
+    }
 	Normalize();
 }
 
 quat quat::Slerp(const quat& q0, const quat& q1, double u)
 {
-	quat q = q0;
+	// quat q = q0;
 	//TODO: student implemetation of Slerp goes here
-
+    double omega = Dot(q0, q1);
+    quat q = sin((1.0 - u) * omega) / sin(omega) * q1 + sin(omega * u) / sin(omega) * q0;
 	return q.Normalize();
 }
 quat quat::SDouble(const quat& a, const quat& b)
 {
-	quat q = a;
+	// quat q = a;
 	//TODO: student implementation ofSDouble goes here
-
+    quat q = 2.0 * Dot(a, b) * b - a;
 	return q.Normalize();
 }
 
 quat quat::SBisect(const quat& a, const quat& b)
 {
-	quat q = a;
+	// quat q = a;
 	//TODO: student implementation of SBisect goes here
-
+    quat q = a + b;
 	return q.Normalize();
 }
 
@@ -1166,22 +1192,43 @@ quat quat::ProjectToAxis(const quat& q, vec3& axis)
 // Conversion functions
 void quat::ToAxisAngle (vec3& axis, double& angleRad) const
 {
-	axis = vec3(1.0, 0.0, 0.0);
-	angleRad = 0.0;
+	// axis = vec3(1.0, 0.0, 0.0);
+	// angleRad = 0.0;
 	//TODO: student implementation for converting quaternion to axis/angle representation goes here
+    angleRad = 2.0 * acos(mQ[VW]);
+    axis = vec3(mQ[VX], mQ[VY], mQ[VZ]) / sqrt(1.0 - mQ[VW] * mQ[VW]);
 }
 
 void quat::FromAxisAngle (const vec3& axis, double angleRad)
 {
 	//TODO: student implementation for converting from axis/angle to quaternion goes here
-	mQ[VW] = 0.0; mQ[VX] = 1.0; mQ[VY] = 0.0;  mQ[VZ] = 0.0;
+	mQ[VW] = cos(angleRad / 2.0); 
+    mQ[VX] = sin(angleRad / 2.0) * axis[0]; 
+    mQ[VY] = sin(angleRad / 2.0) * axis[1];
+    mQ[VZ] = sin(angleRad / 2.0) * axis[2];
 }
 
 mat3 quat::ToRotation () const
 {
 	mat3 m;
-	m.Identity();
+	// m.Identity();
 	//TODO: student implementation for converting quaternion to rotation matrix goes here
+    double s = mQ[VW];
+    double x = mQ[VX];
+    double y = mQ[VY];
+    double z = mQ[VZ];
+
+    m[0][0] = 1.0 - 2.0 * y * y - 2.0 * z * z;
+    m[0][1] = 2.0 * x * y - 2.0 * s * z;
+    m[0][2] = 2.0 * x * z + 2.0 * s * y;
+
+    m[1][0] = 2.0 * x * y + 2.0 * s * z;
+    m[1][1] = 1.0 - 2.0 * x * x - 2.0 * z * z;
+    m[1][2] = 2.0 * y * z - 2.0 * s * x;
+
+    m[2][0] = 2.0 * x * z - 2.0 * s * y;
+    m[2][1] = 2.0 * y * z + 2.0 * s * x;
+    m[2][2] = 1.0 - 2.0 * x * x - 2.0 * y * y;
 
 	return m;
 }

@@ -1,5 +1,6 @@
 #include "FKViewer.h"
 #include <filesystem>
+#include <experimental/filesystem>	// Jacky added in order to make the program compile
 
 FKViewer::FKViewer(const std::string & name) :
 	Viewer(name)
