@@ -168,9 +168,16 @@ bool IKController::IKSolver_Limb(int endJointID, const ATarget& target)
 	// copy transforms from base skeleton
 	mIKSkeleton.copyTransforms(m_pSkeleton);
 
+	/*
 	if (!mvalidLimbIKchains || createLimbIKchains())
 	{
 		return false;
+	}
+	*/
+	if (!mvalidLimbIKchains)
+	{
+		mvalidLimbIKchains = createLimbIKchains();
+		if (!mvalidLimbIKchains) { return false; }
 	}
 
 	vec3 desiredRootPosition;
@@ -257,6 +264,28 @@ int IKController::computeLimbIK(ATarget target, AIKchain& IKchain, const vec3 mi
 	// TODO: Implement the analytic/geometric IK method assuming a three joint limb  
 	// The actual position of the end joint should match the target position within some episilon error 
 	// the variable "midJointAxis" contains the rotation axis for the middle joint
+	
+	// Rotate elbow
+	double l1 = IKchain.getJoint(1)->getLocalTranslation().Length();
+	double l2 = IKchain.getJoint(0)->getLocalTranslation().Length();
+	vec3 rdVec = target.getLocal2Global() * vec3(0.0, 0.0, 0.0) - IKchain.getJoint(2)->getLocal2Global() * vec3(0.0, 0.0, 0.0);
+	double rd = rdVec.Length();
+
+	double theta2 = M_PI - acos(std::max(std::min((l1 * l1 + l2 * l2 - rd * rd) / (2.0 * l1 * l2), 1.0), -1.0));
+	IKchain.getJoint(1)->setLocalRotation(mat3::Rotation3D(midJointAxis, theta2));
+	IKchain.getJoint(1)->updateTransform();
+
+	// Rotate shoulder
+	vec3 pdVec = IKchain.getJoint(0)->getLocal2Global() * vec3(0.0, 0.0, 0.0) - IKchain.getJoint(2)->getLocal2Global() * vec3(0.0, 0.0, 0.0);
+	double pd = pdVec.Length();
+
+	double angle = acos(Dot(rdVec, pdVec) / (rd * pd));
+	vec3 axis = pdVec.Cross(rdVec).Normalize();
+
+	axis = IKchain.getJoint(2)->getGlobalRotation().Inverse() * axis;	// Converting axis from world frame to local frame
+	IKchain.getJoint(2)->setLocalRotation(IKchain.getJoint(2)->getLocalRotation() * mat3::Rotation3D(axis, angle));
+	IKchain.getJoint(2)->updateTransform();
+
 	return true;
 }
 
@@ -365,6 +394,24 @@ int IKController::computeCCDIK(ATarget target, AIKchain& IKchain, ASkeleton* pIK
 	// 3. compute desired change to local rotation matrix
 	// 4. set local rotation matrix to new value
 	// 5. update transforms for joint and all children
+
+	vec3 e = target.getGlobalTranslation() - IKchain.getJoint(0)->getGlobalTranslation();
+	int iter = 0;
+	while (iter < 50 && e.Length() >= 0.001) {
+		for (int i = 1; i < IKchain.getSize(); i++) {
+			AJoint* currentJoint = IKchain.getJoint(i);
+			vec3 r = IKchain.getJoint(0)->getGlobalTranslation() - IKchain.getJoint(i)->getGlobalTranslation();
+			double deltaTheta = r.Cross(e).Length() / (Dot(r, r) + Dot(r, e)) * IKchain.getWeight(i);
+			vec3 axis = r.Cross(e).Normalize();
+			vec3 axisLocal = currentJoint->getGlobalRotation().Inverse() * axis;
+			currentJoint->setLocalRotation(currentJoint->getLocalRotation() * mat3::Rotation3D(axisLocal, deltaTheta));
+			currentJoint->updateTransform();
+			e = target.getGlobalTranslation() - IKchain.getJoint(0)->getGlobalTranslation();
+		}
+		iter++;
+	}
+	// std::cout << iter << std::endl;
+
 	return true;
 }
 
